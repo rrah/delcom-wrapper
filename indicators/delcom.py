@@ -1,8 +1,9 @@
-#!/usr/bin/python
-
 """Module for delcom status lights.
+
 Author: Robert Walker <rrah99@gmail.com>
+
 Copyright (C) 2015 Robert Walker
+
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; version 2.
@@ -16,31 +17,48 @@ Copyright (C) 2015 Robert Walker
 """
 
 # Builtin imports
-import threading
-import sys
 import logging
-from time import sleep
 
+import indicators
+import indicators.indicator
 
 # Does communication to usb. Surprisingly
 import usb
 
-PIN_GREEN   = 0b00000001
-"""Byte value for green pin"""
-PIN_YELLOW  = 0b00000010
-"""Byte value for yellow pin"""
-PIN_RED     = 0b00000100
-"""Byte value for red pin"""
+logger = logging.getLogger(__name__)
 
 class Device(object):
-    '''
-    Class for talking to Delcom Products generation 2 USB device 
-    Modified from http://permalink.gmane.org/gmane.comp.python.pyusb.user/91
-    '''
+    
+    """Delcom Products generation 2 USB device class.
+    
+    Class attributes:
+        _colour_pins (dict): Mapping of colours to pins on device.
+        allowed_colours (dict): The colours allowed by this device.
+        PRODUCT_ID: Specific indicator id.
+        VENDOR_ID: Delcom vendor id.
+    
+    Instance attributes:
+        _current_colour: Which colour is currently on.
+        _flashing_pin: Which pin is currently set to flashing.
+        device: Pywinusb device for the indicator.
+        
+    Methods:
+        flashing_start: Start the indicator flashing.
+        flashing_stop: Stop the indicator flashing.
+        read_switch: See if the button has been pressed.
+        set_brightness: Change the brightness of the LED's
+        set_light: Turn on/off the specified colour.
+        set_light_green: Turn on the green LED's.
+        set_light_off: Turn off the LED's.
+        set_light_red: Turn on the red LED's.
+        set_light_yellow: Turn on the yellow LED's.
+    """
 
     # Device Constants
-    VENDOR_ID       = 0x0FC5    #: Delcom Product ID
-    PRODUCT_ID      = 0xB080    #: Delcom Product ID
+    VENDOR_ID       = 0x0FC5    
+    """Delcom Vendor ID."""
+    PRODUCT_ID      = 0xB080
+    """Delcom Product ID."""
     INTERFACE_ID    = 0         #: The interface we use
     allowed_colours = {'green': [0x01, 0xFF], 
                                 'yellow': [0x04, 0xFF], 
@@ -54,8 +72,18 @@ class Device(object):
                     }
 
     def __init__(self):
-        '''
-        Constructor'''
+        
+        """Constructor.
+        
+        Arguments:
+            None.
+            
+        Returns:
+            None.
+            
+        Raises:
+            NoDeviceError.
+        """
         
         # Set some default attributes
         self._flashing_pin = None
@@ -84,10 +112,16 @@ class Device(object):
     
     def _force_off(self):
         
-        """
-        Make sure flashing/LEDs are definitely turned off"""
+        """Make sure flashing/LEDs are definitely turned off.
         
-        self._write_data("\x65\x0C\x00\xFF\x00\x00\x00\x00")
+        Arguments:
+            None
+            
+        Returns:
+            None
+        """
+        
+        self._write_data(self._make_packet(101, 0x0c, 0, 0xFF))
         self._write_data(self._make_packet(101, 20, 1))
         self._write_data(self._make_packet(101, 20, 2))
         self._write_data(self._make_packet(101, 20, 4))        
@@ -96,9 +130,12 @@ class Device(object):
         
         """Start the LED's flashing.
         
-        Keyword arguements:
+        Arguments:
             flash_speed (int): Seconds to stay in each state.
                 Floored to 0.01 and ceilinged to 2.55
+                
+        Returns:
+            None.
         """
         
         # Get the flash speed in the right range
@@ -127,7 +164,13 @@ class Device(object):
     def flashing_stop(self):
         
         """Check if a pin is actually flashing, and if so
-        turn it off and turn off flashing
+        turn it off and turn off flashing.
+        
+        Arguments:
+            None
+        
+        Returns:
+            None
         """
         
         if self._flashing_pin is not None:
@@ -137,19 +180,44 @@ class Device(object):
 
     def _make_packet(self, maj_cmd, min_cmd, lsb = 0x00, msb = 0x00):
         
+        """Put together a packet to be sent to the device. Pads out packet
+        with 0x00 to get it to required size.
+        
+        Arguments:
+            maj_cmd (byte): Major command, as defined in Delcom datasheet.
+            min_cmd (byte): Minor command, as defined in Delcom datasheet.
+            lsb (byte): Least significant byte for data payload.
+            msb (byte): Most significant byte for data payload.
+        
+        Returns:
+            List of 8 bytes, which constitutes a packet.
+        """
+        
         return [maj_cmd, min_cmd, lsb, msb, 0x00, 0x00, 0x00, 0x00]
 
     def set_brightness(self, brightness):
         
         """Change brightness of LED's.
         
-        Arguements:
-            brightness (int): Brightness value between 0 and 100.
+        Arguments:
+            brightness (int): Brightness value between 0 and 100. Below 10 causes flickering.
+        
+        Returns:
+            None
         """
         
         self._set_pwr(brightness)
 
     def _set_pwr(self, pwr):
+        
+        """Do the low-level sending of data to change brightness.
+        
+        Arguments:
+            pwr (int): Brightness value between 0 and 100.
+            
+        Returns:
+            None
+        """
         
         pwr = int(pwr)
         if pwr > 100:
@@ -161,6 +229,15 @@ class Device(object):
         self._write_data(self._make_packet(101, 34, 2, pwr))
         
     def _write_data(self, data):
+        
+        """Send data to the device.
+        
+        Arguments:
+            data (list): list of bytes to send, in the form returned by _make_packet.
+            
+        Returns:
+            None.
+        """
 
         self.device.ctrl_transfer(0x21, 0x09, 0x0365, 0x0000, data, 100)
 
@@ -168,31 +245,29 @@ class Device(object):
     
         """See if the button has been pressed.
         
-        Return: 
-            Number of presses
-            True if pressed False otherwise.
+        Arguments:
+            None.
+        
+        Returns: 
+            True if pressed, False otherwise.
         """
        
-        presses = 0
-        counter_data = []
-        pressed_data = []
+        data = None
+        while not data:
+            try:
+                data = self._read_data(8)
+            except:
+                # There might be a useful case to see these
+                logger.exception('Something went wrong getting data.')
+        if data[8:11] == [0, 0, 0]:
+            # Bad data, disregard
+            return False
+        counter = data[0]
         
-        # Sometimes doesn't get a return, so repeat until data is got
-        while len(counter_data) != 8:
-            counter_data = self._read_data(0x0008)
-        while len(pressed_data) != 8:
-            pressed_data = self._read_data(0x0064)
-        
-        counter = int(counter_data[0])
-        self._pressed = not bool(int(pressed_data[0]) % 2)
-        
-        # Count up the number of presses since last read
-        while counter > 0:
-            presses += 1
-            counter -= 1 
-        if presses > 0:
-            self._been_pressed = True
-        return presses, self._pressed
+        if counter > 0:
+            return True
+        else:
+            return False
         
     def has_been_pressed(self):
         
@@ -315,32 +390,3 @@ class Device(object):
         
         self.flashing_stop()
         self.set_light_off()
-
-
-class DeviceDescriptor(object):
-    '''
-    Class for defining the USB device
-    '''
-
-    def __init__(self, vendor_id, product_id, interface_id):
-        '''
-        Constructor
-        '''
-        self.vendor_id = vendor_id
-        self.product_id = product_id
-        self.interface_id = interface_id
-
-    def getDevice(self):
-        '''
-        Return the device corresponding to the device descriptor if it is
-        available on the USB bus.  Otherwise return None.  Note that the
-        returned device has yet to be claimed or opened.
-        '''
-        # Find all the USB busses
-        busses = usb.busses()
-        for bus in busses:
-            for device in bus.devices:
-                if device.idVendor == self.vendor_id and \
-                   device.idProduct == self.product_id:
-                    return device
-        return None
