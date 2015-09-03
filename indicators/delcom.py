@@ -99,7 +99,7 @@ class Device(object):
         try:
             self.device.set_configuration()
         except AttributeError:
-            raise USBError('Device not connected')
+            raise indicators.USBError('Device not connected')
         
         self._force_off()
         
@@ -268,27 +268,17 @@ class Device(object):
             return True
         else:
             return False
-        
-    def has_been_pressed(self):
-        
-        """Check to see if the button has been pressed.
-        
-        Return:
-            True if button has been pressed, else False.
-        """
-        
-        self.read_switch()
-        been_pressed = self._been_pressed
-        
-        # Reset attribute
-        self._been_pressed = False
-        return been_pressed
-
-    def get_pressed(self):
-        
-        return self._pressed
 
     def _read_data(self, cmd):
+        
+        """Get data from the device with the relevant command.
+        
+        Arguments:
+            cmd (int): Command to read, as defined in Delcom datasheet.
+            
+        Returns:
+            Data, as list of bytes.
+        """
 
         data = self.device.ctrl_transfer(0xA1, 0x01, cmd, 0x0000, 8, 100)
         return data
@@ -305,6 +295,15 @@ class Device(object):
 
 
     def _get_current_colour(self):
+        
+        """Check what the current colour is.
+        
+        Arguments:
+            None.
+            
+        Returns:
+            Current colour (string).
+        """
         
         return self._current_colour
     
@@ -342,7 +341,7 @@ class Device(object):
         
         """Check if flashing and stop flashing, then set colour.
         
-        Arguements:
+        Arguments:
             colour (string): Colour to set the LED's to.
             
         Returns:
@@ -366,12 +365,6 @@ class Device(object):
         
         return self.set_light('yellow')
         
-    def set_light_blue(self):
-        
-        """Set the LED's to blue."""
-        
-        return self.set_light('blue')
-        
     def set_light_green(self):
         
         """Set the LED's to green."""
@@ -388,5 +381,11 @@ class Device(object):
         
         """Stop any flashing and set the light to off at destruction."""
         
-        self.flashing_stop()
-        self.set_light_off()
+        try:
+            if self.device.is_open():
+                self.flashing_stop()
+                self.set_light_off()
+                self.device.close()
+        except AttributeError:
+            # Device wasn't created succesfully
+            pass
