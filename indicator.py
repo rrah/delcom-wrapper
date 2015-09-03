@@ -42,11 +42,11 @@ class Device(object):
     VENDOR_ID       = 0x0FC5    #: Delcom Product ID
     PRODUCT_ID      = 0xB080    #: Delcom Product ID
     INTERFACE_ID    = 0         #: The interface we use
-    allowed_colours = {'green': '\x01\xFF', 
-                                'yellow': '\x04\xFF', 
-                                'red': '\x02\xFF',
-                                'orange': '\x03\xFF', 
-                                'off': '\x00\xFF'}
+    allowed_colours = {'green': [0x01, 0xFF], 
+                                'yellow': [0x04, 0xFF], 
+                                'red': [0x02, 0xFF],
+                                'orange': [0x06, 0xFF], 
+                                'off': [0x00, 0xFF]}
     """Dict matching colour to byte-values."""
     _colour_pins = { 'green'     : 1,
                     'yellow'    : 4,
@@ -137,8 +137,7 @@ class Device(object):
 
     def _make_packet(self, maj_cmd, min_cmd, lsb = 0x00, msb = 0x00):
         
-        return bytearray([maj_cmd, min_cmd, lsb, msb, 
-                                            0x00, 0x00, 0x00, 0x00])
+        return [maj_cmd, min_cmd, lsb, msb, 0x00, 0x00, 0x00, 0x00]
 
     def set_brightness(self, brightness):
         
@@ -256,10 +255,12 @@ class Device(object):
             return
             
         # Make the call to change the colour
-        msg = "\x65\x0C{}\x00\x00\x00\x00".format(self.allowed_colours[colour])
-        self._write_data("\x65\x0C\x00\xFF\x00\x00\x00\x00")
-        self._write_data(msg)
-        
+        self._write_data(self._make_packet(0x65, 0x0C, 
+                                           self.allowed_colours['off'][0], 
+                                           self.allowed_colours['off'][1]))
+        self._write_data(self._make_packet(0x65, 0x0C, 
+                                           self.allowed_colours[colour][0], 
+                                           self.allowed_colours[colour][1]))        
         self._current_colour = colour
         
     def set_light(self, colour):
